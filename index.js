@@ -1,4 +1,5 @@
 // https://www.youtube.com/watch?v=-fzsjnobti8&ab_channel=K-dev
+// https://www.youtube.com/watch?v=tKzpPMtR5s8&ab_channel=Filly4DCoding
 const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
@@ -16,7 +17,7 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
     },
   },
   // removes _v property
@@ -26,14 +27,10 @@ const userSchema = new mongoose.Schema(
 const exerciseSchema = new mongoose.Schema(
   {
     username: String,
-
-    uId: String,
-
     description: String,
-
     duration: Number,
-
     date: Date,
+    uId: String,
   },
   { versionKey: false }
 );
@@ -51,6 +48,8 @@ app.get('/', (req, res) => {
   res.sendFile(absolutePath);
 });
 
+// !users
+
 app.get('/api/users', async (req, res) => {
   const response = await User.find();
   res.send(response);
@@ -64,12 +63,12 @@ app.post('/api/users', async (req, res) => {
   // find a user with the same username input
   const sameName = await User.findOne({ username });
   // if that name exists return this message
-  if (sameName) {
-    res.json({
-      message: 'That name is already taken. Please try another one.',
-    });
-    return;
-  }
+  // if (sameName) {
+  //   res.json({
+  //     message: 'That name is already taken. Please try another one.',
+  //   });
+  //   return;
+  // }
   // save into the DB
   await newUser.save();
   // send the new user as json as a response
@@ -77,19 +76,19 @@ app.post('/api/users', async (req, res) => {
   res.send(newUser);
 });
 
+// !logs
+
 app.get('/api/users/:_id/logs', async (req, res) => {
   // find the id user searching for
   // use params to find
-  const userId = req.params['_id'];
+  const userId = req.params._id;
   // send a response of the document/data
   const userLog = await Exercise.findById(userId);
   const findUser = await User.findById(userId);
   let { from, to, limit } = req.query;
 
-
-
   const findExerciseLog = await Exercise.find(userLog);
-  console.log(findExerciseLog);
+  // console.log(findExerciseLog);
   // findExerciseLog = modifiedExerciseLog
   // destructuring a map
   let modifiedExerciseLog = findExerciseLog.map(
@@ -103,20 +102,36 @@ app.get('/api/users/:_id/logs', async (req, res) => {
   );
 
   res.json({
-    _id: userId,
     username: findUser.username,
     count: findExerciseLog.length,
+    _id: userId,
     log: modifiedExerciseLog,
   });
 });
 
-app.post('/api/users/:_id/exercises', async (req, res) => {
-  // turn inputs into reqs
-  let { description, duration, date } = req.body;
-  const userId = req.body[':_id'];
-  // find user by id
-  const findUser = await User.findById(userId);
+// ! exercises
 
+app.get('/api/users/:_id/exercises', async (req, res) => {
+  const userId = req.params._id;
+  const foundUser = await User.findById(userId);
+  const log = await Exercise.find({ uId: userId });
+  res.json(log);
+});
+
+app.post('/api/users/:_id/exercises', async (req, res) => {
+  // https://forum.freecodecamp.org/t/fcc-exercise-tracker-cannot-pass-on-test-7-and-8-please-help/489370
+  // turn inputs into reqs
+  // find user by id
+  let { description, duration, date } = req.body;
+  const userId = req.params._id;
+
+  // let exerciseObj = {
+  //   userId,
+  //   description,
+  //   duration,
+  // };
+
+  const findUser = await User.findById(userId);
   if (!findUser) {
     res.json({ message: 'No user found, please try again.' });
   }
@@ -129,23 +144,47 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
   }
   let formInput = {
     username: findUser.username,
-    description,
-    duration,
     date: date.toDateString(),
-    // _id:
+    duration: parseInt(duration),
+    description,
     uId: userId,
   };
 
-  // ?const newExercise = new Exercise(formInput);
-  // ?await newExercise.save();
+  let exerciseObject = {
+    _id: userId,
+    username: findUser.username,
+    date: date.toDateString(),
+    duration: parseInt(duration),
+    description,
+  };
+  const newExercise = new Exercise(exerciseObject);
+  newExercise.save()
+
+  User.findById(userId).then((response) => {
+    res.json({
+      _id: response._id,
+      username: response.username,
+      date: newExercise.date.toDateString(),
+      duration: newExercise.duration,
+      description: newExercise.description,
+    });
+  });
+
+  // await newExercise.save();
+  // res.json(exerciseObject);
   // or
 
-  await Exercise.create(formInput);
+  // await Exercise.create(formInput);
 
+  // console.log('body', req.body);
+  // console.log('params', req.params);
+  // console.log('query', req.query);
   // send data as json as a response
-  res.send(formInput);
+  // console.log('forminput', formInput);
   // place data into the DB
 });
+
+//  ! listener
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port);
