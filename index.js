@@ -1,5 +1,4 @@
-// https://www.youtube.com/watch?v=-fzsjnobti8&ab_channel=K-dev
-// https://www.youtube.com/watch?v=tKzpPMtR5s8&ab_channel=Filly4DCoding
+const mySecret = process.env['DB'];
 const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
@@ -17,7 +16,6 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: true,
-      // unique: true,
     },
   },
   // removes _v property
@@ -26,11 +24,11 @@ const userSchema = new mongoose.Schema(
 
 const exerciseSchema = new mongoose.Schema(
   {
-    username: String,
+    uId: String,
     description: String,
     duration: Number,
+    // needs to be because it a interger to be compared upon
     date: Date,
-    uId: String,
   },
   { versionKey: false }
 );
@@ -76,112 +74,93 @@ app.post('/api/users', async (req, res) => {
   res.send(newUser);
 });
 
-// !logs
-
-app.get('/api/users/:_id/logs', async (req, res) => {
-  // find the id user searching for
-  // use params to find
-  const userId = req.params._id;
-  // send a response of the document/data
-  const userLog = await Exercise.findById(userId);
-  const findUser = await User.findById(userId);
-  let { from, to, limit } = req.query;
-
-  const findExerciseLog = await Exercise.find(userLog);
-  // console.log(findExerciseLog);
-  // findExerciseLog = modifiedExerciseLog
-  // destructuring a map
-  let modifiedExerciseLog = findExerciseLog.map(
-    ({ description, duration, date }) => {
-      return {
-        description,
-        duration,
-        date: date.toDateString(),
-      };
-    }
-  );
-
-  res.json({
-    username: findUser.username,
-    count: findExerciseLog.length,
-    _id: userId,
-    log: modifiedExerciseLog,
-  });
-});
-
-// ! exercises
-
-app.get('/api/users/:_id/exercises', async (req, res) => {
-  const userId = req.params._id;
-  const foundUser = await User.findById(userId);
-  const log = await Exercise.find({ uId: userId });
-  res.json(log);
-});
+// ? POSTS
 
 app.post('/api/users/:_id/exercises', async (req, res) => {
-  // https://forum.freecodecamp.org/t/fcc-exercise-tracker-cannot-pass-on-test-7-and-8-please-help/489370
-  // turn inputs into reqs
-  // find user by id
-  let { description, duration, date } = req.body;
   const userId = req.params._id;
-
-  // let exerciseObj = {
-  //   userId,
-  //   description,
-  //   duration,
-  // };
-
-  const findUser = await User.findById(userId);
-  if (!findUser) {
-    res.json({ message: 'No user found, please try again.' });
-  }
+  let { description, duration, date } = req.body;
 
   if (!date) {
-    date = new Date();
+    date = new Date().toDateString();
   } else {
-    // if date is a real date create one with the date obj
-    date = new Date(date);
+    date = new Date(date).toDateString();
   }
-  let formInput = {
-    username: findUser.username,
-    date: date.toDateString(),
-    duration: parseInt(duration),
-    description,
+
+  let exerciseObj = {
     uId: userId,
-  };
-
-  let exerciseObject = {
-    _id: userId,
-    username: findUser.username,
-    date: date.toDateString(),
+    description: req.body.description,
     duration: parseInt(duration),
-    description,
+    date,
   };
-  const newExercise = new Exercise(exerciseObject);
-  newExercise.save()
+  User.findById(userId).then((user) => {
+    let newExercise = new Exercise(exerciseObj);
+    newExercise.save();
 
-  User.findById(userId).then((response) => {
     res.json({
-      _id: response._id,
-      username: response.username,
-      date: newExercise.date.toDateString(),
-      duration: newExercise.duration,
+      _id: user._id,
+      username: user.username,
       description: newExercise.description,
+      duration: parseInt(newExercise.duration),
+      date: newExercise.date.toDateString(),
     });
+    console.log(user);
   });
+});
 
-  // await newExercise.save();
-  // res.json(exerciseObject);
-  // or
+app.get('/api/users/:_id/logs', async (req, res) => {
+  const uId = req.params._id;
+  const findUser = await User.findById(uId);
+  let { from, to, limit } = req.query;
+  if (!limit) {
+    limit = 100;
+  }
+  limit = parseInt(limit);
 
-  // await Exercise.create(formInput);
+  let dateFilter = { uId };
 
-  // console.log('body', req.body);
-  // console.log('params', req.params);
-  // console.log('query', req.query);
-  // send data as json as a response
-  // console.log('forminput', formInput);
-  // place data into the DB
+  // set date to a yyyy-mm-dd
+  // .toISOString().split("T")[0]
+
+  if (from !== undefined && to === undefined) {
+    dateFilter.date = { $gte: new Date(from) };
+  } else if (to !== undefined && from === undefined) {
+    dateFilter.date = { $gte: new Date(to) };
+  } else if (from !== undefined && to !== undefined) {
+    dateFilter.date = { $gte: new Date(from), $lte: new Date(to) };
+  }
+
+  //   if (from){
+  //     dateFilter.date['$gte'] = new Date(from)
+  //   }
+  //   if (to){
+  //     dateFilter.date['$lte'] = new Date(to)
+  //   }
+  // if (from || to) {
+  //   filter.dateFilter = dateFilter;
+  // }
+
+  // $'gte' greaterThanEqual '$lte' lessThanEqual
+
+  responseObj = {
+    _id: uId,
+    username: findUser.username,
+  };
+  // console.log({queryObj})
+  const findExercises = await Exercise.find(dateFilter).limit(limit).exec();
+  const exercises = findExercises;
+  responseObj.log = exercises.map((exercise) => {
+    return {
+      description: exercise.description,
+      duration: exercise.duration,
+      date: exercise.date.toDateString(),
+    };
+  });
+  responseObj.count = findExercises.length;
+
+  console.log(responseObj, dateFilter);
+  res.json(responseObj);
+
+  // console.log(findLogs)
 });
 
 //  ! listener
